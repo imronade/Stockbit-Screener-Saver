@@ -67,10 +67,10 @@ git clone https://github.com/imronade/Stockbit-Screener-Saver.git
 
 Jika Anda atau rekan Anda ingin menggunakan fitur **Sync to Sheets**:
 
-1. **Buat Salinan Spreadsheet:** Buat Google Spreadsheet baru dengan 3 sheet utama:
-   - `dashboard`
-   - `record_data`
-   - `setting_kategori`
+1. **Gunakan Template Spreadsheet Resmi:**
+   - Download file template dari repository ini: [**`Hasil_Screener_Stockbit_Template.xlsx`**](Hasil_Screener_Stockbit_Template.xlsx).
+   - Upload file tersebut ke Google Drive Anda, lalu buka dan simpan sebagai Google Spreadsheet (**File > Save as Google Sheets**).
+   - Template ini sudah dilengkapi dengan sheet `panduan_penggunaan`, `dashboard`, `record_data`, dan `setting_kategori`.
 2. **Pasang Script:**
    - Di Google Spreadsheet, buka menu **Extensions** > **Apps Script**.
    - Salin seluruh kode dari file [`google_apps_script.js`](google_apps_script.js) dan tempelkan ke editor Apps Script.
