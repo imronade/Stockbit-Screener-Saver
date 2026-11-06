@@ -1,11 +1,8 @@
 /**
- * STOCKBIT SCREENER SAVER - GOOGLE APPS SCRIPT (With Date Picker & Range Filter)
+ * STOCKBIT SCREENER SAVER - GOOGLE APPS SCRIPT (Dynamic Columns Support)
  * 
- * Fitur:
- * 1. Filter Rentang Tanggal (Start Date - End Date) di sheet Dashboard (Cell C3 dan E3)
- * 2. Pop-up Kalender Otomatis (Double-click Cell C3 / E3 untuk memilih tanggal via Date Picker)
- * 3. Total Muncul dihitung hanya dalam rentang tanggal yang dipilih
- * 4. Otomatis re-render saat user memilih tanggal baru via onEdit trigger
+ * Otomatis mendeteksi kolom baru dari berbagai macam screener (misal: Fundamental, Market Cap, DER, dsb).
+ * Jika ada kolom baru yang belum ada di 'record_data', script akan otomatis menambahkannya ke samping kanan.
  */
 
 function doPost(e) {
@@ -35,33 +32,88 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
 
+    // 1. Kategori mapping
     const categoryMap = getCategoryMapping(settingSheet);
     const category = categoryMap[screenerName] || "Lainnya";
 
+    // 2. Baca Header yang sudah ada di sheet 'record_data'
+    let currentHeaders = [];
+    const lastCol = recordSheet.getLastColumn();
+    if (lastCol > 0) {
+      currentHeaders = recordSheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
+    }
+
+    // Header Dasar Wajib
+    const baseHeaders = ["No", "Tanggal", "Hari", "Nama Screener", "Kategori", "Emiten", "Harga Penutupan"];
+    if (currentHeaders.length === 0) {
+      currentHeaders = [...baseHeaders];
+    }
+
+    // 3. Deteksi Kolom/Metrik Baru yang Dibawa oleh Screener Ini
+    // Kumpulkan semua nama metrik unik dari seluruh baris
+    let incomingMetricNames = new Set();
+    rows.forEach(r => {
+      if (r.metrics) {
+        Object.keys(r.metrics).forEach(m => incomingMetricNames.add(m));
+      }
+    });
+
+    // Cek apakah ada kolom baru yang belum ada di record_data
+    let newColumnsToAdd = [];
+    incomingMetricNames.forEach(colName => {
+      // Kecualikan jika sudah merupakan salah satu header dasar
+      if (!currentHeaders.includes(colName) && !["symbol", "emiten", "saham", "price", "harga"].includes(colName.toLowerCase())) {
+        newColumnsToAdd.push(colName);
+        currentHeaders.push(colName);
+      }
+    });
+
+    // Jika ada kolom baru, tambahkan header baru di baris 1 record_data
+    if (newColumnsToAdd.length > 0) {
+      const startNewCol = currentHeaders.length - newColumnsToAdd.length + 1;
+      const headerRange = recordSheet.getRange(1, startNewCol, 1, newColumnsToAdd.length);
+      headerRange.setValues([newColumnsToAdd])
+        .setBackground("#00875A")
+        .setFontColor("#FFFFFF")
+        .setFontWeight("bold")
+        .setFontSize(10)
+        .setHorizontalAlignment("center")
+        .setVerticalAlignment("middle");
+      recordSheet.setRowHeight(1, 26);
+    }
+
+    // 4. Susun Baris Data Sesuai Urutan Header yang Terkini
     let lastRow = recordSheet.getLastRow();
     let nextNo = lastRow > 1 ? (Number(recordSheet.getRange(lastRow, 1).getValue()) || 0) + 1 : 1;
 
     let appendRows = [];
     rows.forEach(r => {
-      appendRows.push([
-        nextNo++,
-        dateStr,
-        dayStr,
-        screenerName,
-        category,
-        r.emiten,
-        r.price,
-        r.return1d,
-        r.bandarVal,
-        r.netForeign,
-        r.streak
-      ]);
+      let rowData = new Array(currentHeaders.length).fill("");
+      rowData[0] = nextNo++;
+      rowData[1] = dateStr;
+      rowData[2] = dayStr;
+      rowData[3] = screenerName;
+      rowData[4] = category;
+      rowData[5] = r.emiten;
+      rowData[6] = r.price;
+
+      // Isi kolom metrik dinamis
+      if (r.metrics) {
+        Object.keys(r.metrics).forEach(key => {
+          let colIdx = currentHeaders.indexOf(key);
+          if (colIdx !== -1) {
+            rowData[colIdx] = r.metrics[key];
+          }
+        });
+      }
+      appendRows.push(rowData);
     });
 
     if (appendRows.length > 0) {
-      recordSheet.getRange(lastRow + 1, 1, appendRows.length, appendRows[0].length).setValues(appendRows);
+      recordSheet.getRange(lastRow + 1, 1, appendRows.length, currentHeaders.length).setValues(appendRows);
     }
 
+    // 5. Update Dashboard
     refreshDashboard();
 
     return ContentService.createTextOutput(JSON.stringify({ 
@@ -79,7 +131,6 @@ function doGet(e) {
   return ContentService.createTextOutput("Stockbit Screener Saver Web App is active!").setMimeType(ContentService.MimeType.TEXT);
 }
 
-// Trigger Otomatis saat tanggal dipilih di C3 atau E3
 function onEdit(e) {
   try {
     const sheet = e.source.getActiveSheet();
@@ -135,7 +186,6 @@ function refreshDashboard() {
   const settingSheet = ss.getSheetByName("setting_kategori");
   if (!recordSheet) return;
 
-  // Pasang Data Validation Tanggal (Agar muncul kalender interaktif saat double klik di C3 dan E3)
   const ruleDate = SpreadsheetApp.newDataValidation()
     .requireDate()
     .setAllowInvalid(true)
@@ -150,10 +200,8 @@ function refreshDashboard() {
 
   dash.getRange("A5:Z500").clear();
 
-  // Header Judul Dashboard
   dash.getRange("A1").setValue("STOCKBIT SCREENER DASHBOARD").setFontSize(15).setFontWeight("bold");
 
-  // Filter Box Baris 3
   dash.getRange("B3").setValue("📅 Start Date:").setFontWeight("bold").setFontSize(10).setHorizontalAlignment("right");
   dash.getRange("D3").setValue("s/d  End Date:").setFontWeight("bold").setFontSize(10).setHorizontalAlignment("right");
   dash.getRange("F3").setValue("(Double-click kotak untuk pilih tanggal kalender | Kosongkan untuk semua)")
@@ -214,7 +262,6 @@ function refreshDashboard() {
 
     const emitenList = Object.keys(emitenMap);
 
-    // 1. Judul Kategori
     dash.getRange(currentRow, 1, 1, colCount).merge()
       .setValue(`List Hasil Screener "${catName}"`)
       .setBackground(color.sec)
@@ -225,7 +272,6 @@ function refreshDashboard() {
     dash.setRowHeight(currentRow, 26);
     currentRow++;
 
-    // 2. Table Headers
     const headers = ["No.", "Emiten", "Total Muncul", "Total Irisan", "Irisan Screener", "Terakhir Muncul", "Harga Terakhir"];
     const thRange = dash.getRange(currentRow, 1, 1, colCount);
     thRange.setValues([headers])
@@ -238,7 +284,6 @@ function refreshDashboard() {
     dash.setRowHeight(currentRow, 22);
     currentRow++;
 
-    // 3. Data Baris
     if (emitenList.length === 0) {
       dash.getRange(currentRow, 1, 1, colCount).merge()
         .setValue("(Tidak ada data emiten dalam rentang tanggal ini)")

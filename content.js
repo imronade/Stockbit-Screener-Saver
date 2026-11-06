@@ -1,4 +1,4 @@
-// Stockbit Screener Saver (Unified Floating Menu & Modal Settings)
+// Stockbit Screener Saver (Dynamic Columns Auto-Detection)
 (function () {
   'use strict';
 
@@ -105,7 +105,7 @@
     document.body.removeChild(link);
   }
 
-  // 2. Sync to Google Sheets
+  // 2. Sync to Google Sheets (Mendukung Dynamic Columns & Metrics)
   async function syncToGoogleSheets(statusElement) {
     let webhookUrl = localStorage.getItem('stockbit_gsheets_webhook');
     if (!webhookUrl) {
@@ -119,44 +119,38 @@
       return;
     }
 
-    const header = cleanRows[0].map((h) => h.toLowerCase());
-    const findIndex = (keywords) => {
-      return header.findIndex((h) => keywords.some((k) => h.includes(k)));
-    };
+    // Ambil header kolom asli dari tabel Stockbit
+    const headers = cleanRows[0].map(h => h.trim());
+    const symbolIdx = headers.findIndex(h => /symbol|emiten|saham/i.test(h));
+    const priceIdx = headers.findIndex(h => /price|harga|last/i.test(h));
 
-    const emitenIdx = findIndex(['symbol', 'emiten', 'saham']);
-    const priceIdx = findIndex(['price', 'harga', 'last']);
-    const returnIdx = findIndex(['price returns', '1 day', 'change', '%']);
-    const bandarValIdx = findIndex(['bandar value']);
-    const netForeignIdx = findIndex(['net foreign buy / sell', 'foreign buy', 'foreign']);
-    const streakIdx = findIndex(['streak']);
-
-    let parsedRows = [];
+    let rowsList = [];
     for (let i = 1; i < cleanRows.length; i++) {
       const row = cleanRows[i];
-      let emiten = emitenIdx !== -1 ? row[emitenIdx] : row[0];
+      let emiten = symbolIdx !== -1 ? row[symbolIdx] : row[0];
       if (emiten) emiten = emiten.split(' ')[0].trim();
 
-      let price = priceIdx !== -1 ? parseFloat(row[priceIdx].replace(/,/g, '')) || row[priceIdx] : '';
-      let return1d = returnIdx !== -1 ? row[returnIdx] : '';
-      let bandarVal = bandarValIdx !== -1 ? row[bandarValIdx] : '';
-      let netForeign = netForeignIdx !== -1 ? row[netForeignIdx] : '';
-      let streak = streakIdx !== -1 ? row[streakIdx] : '';
+      let price = priceIdx !== -1 ? (parseFloat(row[priceIdx].replace(/,/g, '')) || row[priceIdx]) : '';
 
-      parsedRows.push({
+      // Simpan semua metrik kolom dinamis sebagai key-value (object)
+      let metrics = {};
+      headers.forEach((colName, cIdx) => {
+        if (cIdx !== symbolIdx && colName) {
+          metrics[colName] = row[cIdx] || '';
+        }
+      });
+
+      rowsList.push({
         emiten: emiten || '',
         price: price || '',
-        return1d: return1d || '',
-        bandarVal: bandarVal || '',
-        netForeign: netForeign || '',
-        streak: streak || ''
+        metrics: metrics
       });
     }
 
     const payload = {
       screenerName: getScreenerTitle(),
       date: new Date().toISOString().slice(0, 10),
-      rows: parsedRows
+      rows: rowsList
     };
 
     if (statusElement) statusElement.innerText = '⏳ Mengirim data...';
@@ -171,7 +165,7 @@
         body: JSON.stringify(payload)
       });
 
-      alert(`✅ Berhasil! Data "${payload.screenerName}" (${parsedRows.length} emiten) terkirim ke Google Sheets.`);
+      alert(`✅ Berhasil! Data "${payload.screenerName}" (${rowsList.length} emiten) terkirim. Kolom baru otomatis ditambahkan ke Google Sheets.`);
     } catch (err) {
       alert('Gagal mengirim ke Google Sheets: ' + err.message);
     } finally {
@@ -179,7 +173,7 @@
     }
   }
 
-  // 3. Modal Settings Pop-up
+  // 3. Modal Settings
   function openSettingsModal(notice) {
     const existingModal = document.getElementById('sb-settings-modal');
     if (existingModal) existingModal.remove();
@@ -288,7 +282,7 @@
     };
   }
 
-  // 4. Single Unified Floating Icon & Dropdown Menu
+  // 4. Floating Main Action Button
   function injectUnifiedFloatingButton() {
     if (!window.location.href.includes('screener')) {
       const container = document.getElementById('sb-unified-container');
@@ -308,7 +302,6 @@
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     });
 
-    // Menu Popover (Hidden by default)
     const menu = document.createElement('div');
     menu.id = 'sb-unified-menu';
     Object.assign(menu.style, {
@@ -343,7 +336,6 @@
       transition: 'background 0.15s'
     };
 
-    // Item 1: Download to Excel
     const itemExcel = document.createElement('button');
     itemExcel.innerHTML = `
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00ab6b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -361,7 +353,6 @@
       downloadExcel();
     };
 
-    // Item 2: Sync to Sheets
     const itemSync = document.createElement('button');
     itemSync.innerHTML = `
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -377,7 +368,6 @@
       syncToGoogleSheets();
     };
 
-    // Divider
     const divider = document.createElement('div');
     Object.assign(divider.style, {
       height: '1px',
@@ -385,7 +375,6 @@
       margin: '4px 0'
     });
 
-    // Item 3: Setting
     const itemSetting = document.createElement('button');
     itemSetting.innerHTML = `
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#718096" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -407,7 +396,6 @@
     menu.appendChild(divider);
     menu.appendChild(itemSetting);
 
-    // Single Floating Main Action Button
     const mainBtn = document.createElement('button');
     mainBtn.id = 'sb-main-btn';
     mainBtn.title = 'Stockbit Screener Saver';
