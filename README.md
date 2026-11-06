@@ -1,4 +1,4 @@
-# Stockbit Screener Saver 📈📊
+# Stockbit Screener Saver
 
 Browser Extension (Brave, Google Chrome, Microsoft Edge) untuk mengunduh hasil filter saham dari **Stockbit Screener** langsung ke dalam format **Excel (`.xlsx`)** hanya dengan 1 klik!
 
