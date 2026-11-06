@@ -1,9 +1,8 @@
-// Stockbit Screener Saver (XLSX / Excel)
+// Stockbit Screener Saver (Excel + Google Sheets Sync)
 (function () {
   'use strict';
 
   function getScreenerTitle() {
-    // 1. Coba cari judul h1 / h2 / h3 / h4
     const headings = document.querySelectorAll('h1, h2, h3, h4');
     for (let el of headings) {
       let t = el.innerText.trim();
@@ -12,12 +11,10 @@
       }
     }
 
-    // 2. Fallback: Cari elemen span/div berukuran font besar di area atas screener
     const candidates = document.querySelectorAll('span, div');
     for (let el of candidates) {
       if (el.children.length === 0 && el.innerText) {
         const text = el.innerText.trim();
-        // Cek jika teks diikuti icon copy/edit atau kata Symbols
         const next = el.nextElementSibling;
         if (next && (next.innerText.includes('Symbols') || next.querySelector('svg'))) {
           return text;
@@ -33,11 +30,8 @@
   }
 
   function cleanSheetName(name) {
-    // Excel sheet name max 31 karakter dan tidak boleh ada karakter khusus
     let clean = name.replace(/[\\/*?[\]:]/g, '').trim();
-    if (clean.length > 31) {
-      clean = clean.substring(0, 31).trim();
-    }
+    if (clean.length > 31) clean = clean.substring(0, 31).trim();
     return clean || 'Screener';
   }
 
@@ -48,20 +42,11 @@
     return buf;
   }
 
-  function downloadExcel() {
-    if (typeof XLSX === 'undefined') {
-      alert('Library Excel sedang dimuat, silakan coba 2 detik lagi.');
-      return;
-    }
-
+  function extractTableData() {
     const tables = document.querySelectorAll('table');
-    if (!tables.length) {
-      alert('Tabel Stockbit Screener tidak ditemukan!');
-      return;
-    }
+    if (!tables.length) return null;
 
     let rowsData = [];
-
     tables.forEach((table) => {
       const rows = table.querySelectorAll('tr');
       rows.forEach((row, rowIndex) => {
@@ -85,27 +70,31 @@
       });
     });
 
-    // Filter baris kosong
-    const cleanRows = rowsData.filter((r) => r.some((c) => c !== ''));
+    return rowsData.filter((r) => r.some((c) => c !== ''));
+  }
 
-    if (!cleanRows.length) {
-      alert('Tidak ada data tabel yang dapat diunduh.');
+  // 1. Fitur Download File Excel Lokal (.xlsx)
+  function downloadExcel() {
+    if (typeof XLSX === 'undefined') {
+      alert('Library Excel sedang dimuat, silakan coba 2 detik lagi.');
       return;
     }
 
-    // Ambil Judul Screener dan tanggal hari ini
+    const cleanRows = extractTableData();
+    if (!cleanRows || !cleanRows.length) {
+      alert('Tabel Stockbit Screener tidak ditemukan atau belum dimuat!');
+      return;
+    }
+
     const rawTitle = getScreenerTitle();
-    const today = new Date().toISOString().slice(0, 10); // format YYYY-MM-DD
+    const today = new Date().toISOString().slice(0, 10);
     const fileName = `${cleanFileName(rawTitle)}_${today}.xlsx`;
     const sheetName = cleanSheetName(rawTitle);
 
-    // Buat Workbook & Worksheet Excel dengan SheetJS
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(cleanRows);
-
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
 
-    // Download file .xlsx
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' });
     const blob = new Blob([s2ab(wbout)], { type: 'application/octet-stream' });
     const link = document.createElement('a');
@@ -116,66 +105,187 @@
     document.body.removeChild(link);
   }
 
-  function injectFloatingButton() {
-    if (!window.location.href.includes('screener')) {
-      const existingBtn = document.getElementById('stockbit-csv-download-btn');
-      if (existingBtn) existingBtn.remove();
+  // 2. Fitur Sinkronisasi Langsung ke Google Sheets
+  async function syncToGoogleSheets(btnSync) {
+    let webhookUrl = localStorage.getItem('stockbit_gsheets_webhook');
+    if (!webhookUrl) {
+      webhookUrl = prompt(
+        'Masukkan URL Web App Google Apps Script Anda:\n(Contoh: https://script.google.com/macros/s/.../exec)'
+      );
+      if (!webhookUrl || !webhookUrl.startsWith('https://script.google.com')) {
+        alert('URL Google Apps Script tidak valid. Sinkronisasi dibatalkan.');
+        return;
+      }
+      localStorage.setItem('stockbit_gsheets_webhook', webhookUrl.trim());
+    }
+
+    const cleanRows = extractTableData();
+    if (!cleanRows || cleanRows.length <= 1) {
+      alert('Tabel Stockbit Screener tidak ditemukan atau belum ada data saham!');
       return;
     }
 
-    if (document.getElementById('stockbit-csv-download-btn')) return;
+    const header = cleanRows[0].map((h) => h.toLowerCase());
+    const findIndex = (keywords) => {
+      return header.findIndex((h) => keywords.some((k) => h.includes(k)));
+    };
 
-    const btn = document.createElement('button');
-    btn.id = 'stockbit-csv-download-btn';
-    btn.innerHTML = `
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;">
+    const emitenIdx = findIndex(['symbol', 'emiten', 'saham']);
+    const priceIdx = findIndex(['price', 'harga', 'last']);
+    const returnIdx = findIndex(['price returns', '1 day', 'change', '%']);
+    const bandarValIdx = findIndex(['bandar value']);
+    const netForeignIdx = findIndex(['net foreign buy / sell', 'foreign buy', 'foreign']);
+    const streakIdx = findIndex(['streak']);
+
+    let parsedRows = [];
+    for (let i = 1; i < cleanRows.length; i++) {
+      const row = cleanRows[i];
+      let emiten = emitenIdx !== -1 ? row[emitenIdx] : row[0];
+      if (emiten) emiten = emiten.split(' ')[0].trim(); // Ambil kode saham saja
+
+      let price = priceIdx !== -1 ? parseFloat(row[priceIdx].replace(/,/g, '')) || row[priceIdx] : '';
+      let return1d = returnIdx !== -1 ? row[returnIdx] : '';
+      let bandarVal = bandarValIdx !== -1 ? row[bandarValIdx] : '';
+      let netForeign = netForeignIdx !== -1 ? row[netForeignIdx] : '';
+      let streak = streakIdx !== -1 ? row[streakIdx] : '';
+
+      parsedRows.push({
+        emiten: emiten || '',
+        price: price || '',
+        return1d: return1d || '',
+        bandarVal: bandarVal || '',
+        netForeign: netForeign || '',
+        streak: streak || ''
+      });
+    }
+
+    const payload = {
+      screenerName: getScreenerTitle(),
+      date: new Date().toISOString().slice(0, 10),
+      rows: parsedRows
+    };
+
+    // Ubah status tombol jadi Loading
+    const originalText = btnSync.innerHTML;
+    btnSync.innerHTML = '<span>⏳ Mengirim...</span>';
+    btnSync.style.opacity = '0.7';
+
+    try {
+      await fetch(webhookUrl, {
+        method: 'POST',
+        mode: 'no-cors', // Penting untuk Web App Google Script
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      alert(`✅ Berhasil! Data "${payload.screenerName}" berhasil dikirim ke Google Sheets.`);
+    } catch (err) {
+      alert('Gagal mengirim ke Google Sheets: ' + err.message);
+    } finally {
+      btnSync.innerHTML = originalText;
+      btnSync.style.opacity = '1';
+    }
+  }
+
+  // 3. Pasang Floating Action Bar di Halaman Screener
+  function injectFloatingButtons() {
+    if (!window.location.href.includes('screener')) {
+      const bar = document.getElementById('stockbit-saver-action-bar');
+      if (bar) bar.remove();
+      return;
+    }
+
+    if (document.getElementById('stockbit-saver-action-bar')) return;
+
+    const bar = document.createElement('div');
+    bar.id = 'stockbit-saver-action-bar';
+    Object.assign(bar.style, {
+      position: 'fixed',
+      bottom: '24px',
+      right: '24px',
+      zIndex: '999999',
+      display: 'flex',
+      gap: '10px',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    });
+
+    // Tombol 1: Download Excel
+    const btnExcel = document.createElement('button');
+    btnExcel.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
         <polyline points="7 10 12 15 17 10"></polyline>
         <line x1="12" y1="15" x2="12" y2="3"></line>
       </svg>
       <span>Download Excel</span>
     `;
-
-    Object.assign(btn.style, {
-      position: 'fixed',
-      bottom: '24px',
-      right: '24px',
-      zIndex: '999999',
+    Object.assign(btnExcel.style, {
       backgroundColor: '#00ab6b',
       color: '#ffffff',
       border: 'none',
       borderRadius: '24px',
-      padding: '10px 18px',
+      padding: '10px 16px',
       fontSize: '13px',
       fontWeight: '600',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       cursor: 'pointer',
       boxShadow: '0 4px 14px rgba(0, 171, 107, 0.4)',
       display: 'flex',
       alignItems: 'center',
       transition: 'all 0.2s ease-in-out'
     });
-
-    btn.onmouseover = () => {
-      btn.style.backgroundColor = '#00925b';
-      btn.style.transform = 'translateY(-2px)';
-      btn.style.boxShadow = '0 6px 18px rgba(0, 171, 107, 0.5)';
+    btnExcel.onmouseover = () => {
+      btnExcel.style.backgroundColor = '#00925b';
+      btnExcel.style.transform = 'translateY(-2px)';
     };
-
-    btn.onmouseout = () => {
-      btn.style.backgroundColor = '#00ab6b';
-      btn.style.transform = 'translateY(0)';
-      btn.style.boxShadow = '0 4px 14px rgba(0, 171, 107, 0.4)';
+    btnExcel.onmouseout = () => {
+      btnExcel.style.backgroundColor = '#00ab6b';
+      btnExcel.style.transform = 'translateY(0)';
     };
+    btnExcel.addEventListener('click', downloadExcel);
 
-    btn.addEventListener('click', downloadExcel);
-    document.body.appendChild(btn);
+    // Tombol 2: Sync to Google Sheets
+    const btnSync = document.createElement('button');
+    btnSync.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;">
+        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+      </svg>
+      <span style="margin-left: 6px;">Sync to Sheets</span>
+    `;
+    Object.assign(btnSync.style, {
+      backgroundColor: '#1a73e8',
+      color: '#ffffff',
+      border: 'none',
+      borderRadius: '24px',
+      padding: '10px 16px',
+      fontSize: '13px',
+      fontWeight: '600',
+      cursor: 'pointer',
+      boxShadow: '0 4px 14px rgba(26, 115, 232, 0.4)',
+      display: 'flex',
+      alignItems: 'center',
+      transition: 'all 0.2s ease-in-out'
+    });
+    btnSync.onmouseover = () => {
+      btnSync.style.backgroundColor = '#1557b0';
+      btnSync.style.transform = 'translateY(-2px)';
+    };
+    btnSync.onmouseout = () => {
+      btnSync.style.backgroundColor = '#1a73e8';
+      btnSync.style.transform = 'translateY(0)';
+    };
+    btnSync.addEventListener('click', () => syncToGoogleSheets(btnSync));
+
+    bar.appendChild(btnExcel);
+    bar.appendChild(btnSync);
+    document.body.appendChild(bar);
   }
 
-  injectFloatingButton();
+  injectFloatingButtons();
 
   const observer = new MutationObserver(() => {
-    injectFloatingButton();
+    injectFloatingButtons();
   });
 
   observer.observe(document.body, {
