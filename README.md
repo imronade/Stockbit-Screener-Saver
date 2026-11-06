@@ -3,8 +3,19 @@
 Browser Extension (Brave, Google Chrome, Microsoft Edge) untuk mengunduh hasil filter saham dari **Stockbit Screener** langsung ke dalam format **Excel (`.xlsx`)** hanya dengan 1 klik!
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Version: 1.1.0](https://img.shields.io/badge/Version-1.1.0-orange.svg)
 ![Manifest](https://img.shields.io/badge/Manifest-V3-blue)
 ![Platform](https://img.shields.io/badge/Browser-Chrome%20%7C%20Brave%20%7C%20Edge-brightgreen)
+
+---
+
+## 📌 About
+
+**Stockbit Screener Saver** adalah ekstensi browser berbasis Manifest V3 yang mempermudah investor dan trader saham mengunduh tabel data dari Stockbit Screener ke file Excel (`.xlsx`). Ekstensi ini otomatis mendeteksi nama screener dan tanggal aktif untuk dijadikan nama file sekaligus nama sheet Excel secara rapi, tanpa memerlukan konfigurasi manual atau izin akun sensitif.
+
+- **Versi:** `1.1.0`
+- **Lisensi:** MIT License
+- **Kategori:** Productivity / Financial Tools
 
 ---
 
@@ -12,7 +23,7 @@ Browser Extension (Brave, Google Chrome, Microsoft Edge) untuk mengunduh hasil f
 
 - **🚀 1-Click Export:** Tombol melayang (*floating button*) **"Download Excel"** otomatis muncul di pojok kanan bawah halaman Screener Stockbit.
 - **📑 Otomatisasi Nama File & Sheet:** Nama file dan sheet Excel otomatis menggunakan judul screener Anda ditambah tanggal saat download.
-  - *Format:* `[Nama Screener]_[YYYY-MM-DD].xlsx` (Contoh: `Loser Keluar BB Bandar Masuk_2026-11-06.xlsx`).
+  - *Format:* `[Nama Screener]_[YYYY-MM-DD].xlsx`
 - **🎯 Full Table Support:** Mendukung pemisahan tabel modern Stockbit (menggabungkan kolom simbol/harga di sisi kiri dan kolom data finansial di sisi kanan secara sempurna).
 - **🔒 100% Aman & Privasi Terjaga:** 
   - Tidak ada data yang dikirim ke server luar (*100% Client-Side/Offline*).
@@ -62,7 +73,7 @@ git clone https://github.com/imronade/Stockbit-Screener-Saver.git
 ## 📖 Cara Penggunaan
 
 1. Buka situs [Stockbit Screener](https://stockbit.com/screener) dan pastikan Anda sudah login.
-2. Buka salah satu Preset Screener Anda (misal: *Loser Bandar dan Asing Masuk*).
+2. Buka salah satu Preset Screener Anda.
 3. Tunggu hingga tabel saham selesai dimuat.
 4. Perhatikan di **pojok kanan bawah layar**, akan muncul tombol hijau bertuliskan **"Download Excel"**.
 5. Klik tombol tersebut, dan file `.xlsx` akan langsung terunduh rapi ke folder Downloads Anda.
