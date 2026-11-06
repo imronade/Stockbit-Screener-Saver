@@ -1,11 +1,11 @@
 /**
- * STOCKBIT SCREENER SAVER - GOOGLE APPS SCRIPT (With Date Range Filter)
+ * STOCKBIT SCREENER SAVER - GOOGLE APPS SCRIPT (With Date Picker & Range Filter)
  * 
  * Fitur:
  * 1. Filter Rentang Tanggal (Start Date - End Date) di sheet Dashboard (Cell C3 dan E3)
- * 2. Total Muncul dihitung hanya dalam rentang tanggal yang dipilih
- * 3. Total Irisan & Irisan Screener dihitung dalam rentang tanggal
- * 4. Otomatis re-render saat user mengubah tanggal di C3/E3 via onEdit trigger
+ * 2. Pop-up Kalender Otomatis (Double-click Cell C3 / E3 untuk memilih tanggal via Date Picker)
+ * 3. Total Muncul dihitung hanya dalam rentang tanggal yang dipilih
+ * 4. Otomatis re-render saat user memilih tanggal baru via onEdit trigger
  */
 
 function doPost(e) {
@@ -79,13 +79,12 @@ function doGet(e) {
   return ContentService.createTextOutput("Stockbit Screener Saver Web App is active!").setMimeType(ContentService.MimeType.TEXT);
 }
 
-// Trigger Otomatis: Ketika user mengubah Start Date / End Date di Dashboard, tabel langsung update!
+// Trigger Otomatis saat tanggal dipilih di C3 atau E3
 function onEdit(e) {
   try {
     const sheet = e.source.getActiveSheet();
     if (sheet.getName() === "dashboard") {
       const a1 = e.range.getA1Notation();
-      // C3 = Start Date, E3 = End Date
       if (a1 === "C3" || a1 === "E3") {
         refreshDashboard();
       }
@@ -123,7 +122,7 @@ function normalizeDateStr(val) {
 }
 
 /**
- * Render Ulang Sheet Dashboard dengan Filter Tanggal
+ * Render Ulang Sheet Dashboard
  */
 function refreshDashboard() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -136,20 +135,28 @@ function refreshDashboard() {
   const settingSheet = ss.getSheetByName("setting_kategori");
   if (!recordSheet) return;
 
-  // Baca Filter Tanggal di C3 (Start Date) dan E3 (End Date)
+  // Pasang Data Validation Tanggal (Agar muncul kalender interaktif saat double klik di C3 dan E3)
+  const ruleDate = SpreadsheetApp.newDataValidation()
+    .requireDate()
+    .setAllowInvalid(true)
+    .setHelpText("Klik dua kali untuk memilih tanggal dari kalender")
+    .build();
+
+  dash.getRange("C3").setDataValidation(ruleDate);
+  dash.getRange("E3").setDataValidation(ruleDate);
+
   let startDate = normalizeDateStr(dash.getRange("C3").getValue());
   let endDate = normalizeDateStr(dash.getRange("E3").getValue());
 
-  // Bersihkan data tabel lama mulai baris 5 ke bawah
   dash.getRange("A5:Z500").clear();
 
   // Header Judul Dashboard
   dash.getRange("A1").setValue("STOCKBIT SCREENER DASHBOARD").setFontSize(15).setFontWeight("bold");
 
-  // Filter Bar di Baris 3
+  // Filter Box Baris 3
   dash.getRange("B3").setValue("📅 Start Date:").setFontWeight("bold").setFontSize(10).setHorizontalAlignment("right");
   dash.getRange("D3").setValue("s/d  End Date:").setFontWeight("bold").setFontSize(10).setHorizontalAlignment("right");
-  dash.getRange("F3").setValue("(Ubah tanggal di samping untuk filter)")
+  dash.getRange("F3").setValue("(Double-click kotak untuk pilih tanggal kalender | Kosongkan untuk semua)")
     .setFontSize(9).setFontStyle("italic").setFontColor("#718096").setVerticalAlignment("middle");
 
   dash.getRange("C3").setNumberFormat("yyyy-mm-dd");
@@ -160,7 +167,6 @@ function refreshDashboard() {
   if (categories.length === 0) categories = ["Buy on Weakness", "Momentum / Breakout", "Trend Following"];
 
   const recordValues = recordSheet.getDataRange().getValues();
-  // baris 0 header: [No, Tanggal, Hari, Nama Screener, Kategori, Emiten, Harga, 1D Ret, Bandar, NetForeign, Streak]
 
   const palette = [
     { sec: "#1E3A8A", th: "#2563EB" },
@@ -187,7 +193,6 @@ function refreshDashboard() {
       const rEmiten = String(row[5]).trim();
       const rPrice = row[6];
 
-      // Terapkan Filter Rentang Tanggal jika ada
       if (startDate && rDate < startDate) continue;
       if (endDate && rDate > endDate) continue;
 
@@ -220,7 +225,7 @@ function refreshDashboard() {
     dash.setRowHeight(currentRow, 26);
     currentRow++;
 
-    // 2. Table Headers (7 Kolom)
+    // 2. Table Headers
     const headers = ["No.", "Emiten", "Total Muncul", "Total Irisan", "Irisan Screener", "Terakhir Muncul", "Harga Terakhir"];
     const thRange = dash.getRange(currentRow, 1, 1, colCount);
     thRange.setValues([headers])
@@ -233,7 +238,7 @@ function refreshDashboard() {
     dash.setRowHeight(currentRow, 22);
     currentRow++;
 
-    // 3. Baris Data Emiten
+    // 3. Data Baris
     if (emitenList.length === 0) {
       dash.getRange(currentRow, 1, 1, colCount).merge()
         .setValue("(Tidak ada data emiten dalam rentang tanggal ini)")
@@ -249,11 +254,11 @@ function refreshDashboard() {
         rowsToInsert.push([
           eIdx + 1,
           emiten,
-          item.dates.size,                          // Total Muncul dalam rentang
-          item.screeners.size,                      // Total Irisan dalam rentang
-          Array.from(item.screeners).join(", "),    // Irisan Screener
-          item.lastDate,                            // Terakhir Muncul
-          item.lastPrice                            // Harga Terakhir
+          item.dates.size,
+          item.screeners.size,
+          Array.from(item.screeners).join(", "),
+          item.lastDate,
+          item.lastPrice
         ]);
       });
 
@@ -279,11 +284,11 @@ function refreshDashboard() {
     }
   });
 
-  dash.setColumnWidth(1, 55);  // No
-  dash.setColumnWidth(2, 90);  // Emiten
-  dash.setColumnWidth(3, 110); // Total Muncul
-  dash.setColumnWidth(4, 100); // Total Irisan
-  dash.setColumnWidth(5, 260); // Irisan Screener
-  dash.setColumnWidth(6, 120); // Terakhir Muncul
-  dash.setColumnWidth(7, 110); // Harga Terakhir
+  dash.setColumnWidth(1, 55);
+  dash.setColumnWidth(2, 90);
+  dash.setColumnWidth(3, 110);
+  dash.setColumnWidth(4, 100);
+  dash.setColumnWidth(5, 260);
+  dash.setColumnWidth(6, 120);
+  dash.setColumnWidth(7, 110);
 }

@@ -89,6 +89,13 @@ ws_dash.views.sheetView[0].showGridLines = True
 
 ws_dash.cell(row=1, column=1, value="STOCKBIT SCREENER DASHBOARD").font = font_title
 ws_dash.row_dimensions[1].height = 24
+from openpyxl.worksheet.datavalidation import DataValidation
+dv_date = DataValidation(type="date", operator="between", formula1="2020-01-01", formula2="2035-12-31", allow_blank=True)
+dv_date.prompt = 'Klik dua kali (double-click) untuk memilih tanggal dari kalender pop-up.'
+dv_date.promptTitle = 'Pilih Tanggal'
+ws_dash.add_data_validation(dv_date)
+dv_date.add("C3")
+dv_date.add("E3")
 
 # Filter Box Baris 3
 ws_dash.row_dimensions[3].height = 24
@@ -112,7 +119,7 @@ cell_end.alignment = align_center
 cell_end.font = font_bold
 cell_end.number_format = "yyyy-mm-dd"
 
-cell_hint = ws_dash.cell(row=3, column=6, value="(Kosongkan untuk menampilkan semua tanggal)")
+cell_hint = ws_dash.cell(row=3, column=6, value="(Double-click kotak untuk pilih tanggal kalender | Kosongkan untuk semua)")
 cell_hint.font = font_muted
 cell_hint.alignment = align_left
 
@@ -208,3 +215,4 @@ ws_kat.column_dimensions['C'].width = 50
 out_path = r"G:\My Drive\Saham\Screener_Stockbit\Hasil_Screener_Stockbit.xlsx"
 wb.save(out_path)
 print("Updated template with date range filter successfully saved at:", out_path)
+
