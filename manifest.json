@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Stockbit Screener Excel Saver",
+  "version": "1.1.0",
+  "description": "Download hasil Screener Stockbit langsung ke Excel (.xlsx) dengan nama file dan sheet otomatis.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://stockbit.com/*"
+      ],
+      "js": [
+        "xlsx.full.min.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
