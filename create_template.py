@@ -92,10 +92,10 @@ ws_dash.cell(row=2, column=1, value="Rekap otomatis per kategori: Menyesuaikan j
 ws_dash.row_dimensions[1].height = 24
 ws_dash.row_dimensions[2].height = 18
 
-dash_headers = ["No.", "Emiten", "Total Muncul", "Irisan Screener", "Terakhir Muncul", "Harga Terakhir"]
+dash_headers = ["No.", "Emiten", "Total Muncul", "Total Irisan", "Irisan Screener", "Terakhir Muncul", "Harga Terakhir"]
 
 # Placeholder Table Contoh (Kategori A)
-ws_dash.merge_cells(start_row=4, start_column=1, end_row=4, end_column=6)
+ws_dash.merge_cells(start_row=4, start_column=1, end_row=4, end_column=7)
 sec_cell = ws_dash.cell(row=4, column=1, value='List Hasil Screener "Nama Kategori"')
 sec_cell.font = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
 sec_cell.fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
@@ -111,7 +111,7 @@ for c_idx, h in enumerate(dash_headers, 1):
 ws_dash.row_dimensions[5].height = 22
 
 # Baris pesan kosong
-ws_dash.merge_cells(start_row=6, start_column=1, end_row=6, end_column=6)
+ws_dash.merge_cells(start_row=6, start_column=1, end_row=6, end_column=7)
 empty_msg = ws_dash.cell(row=6, column=1, value="(Belum ada data. Tabel akan terisi otomatis saat Anda mengirim hasil screener dari Stockbit)")
 empty_msg.font = font_muted
 empty_msg.alignment = align_center
@@ -186,3 +186,4 @@ ws_kat.column_dimensions['C'].width = 50
 out_path = r"G:\My Drive\Saham\Screener_Stockbit\Hasil_Screener_Stockbit.xlsx"
 wb.save(out_path)
 print("Template successfully saved at:", out_path)
+
