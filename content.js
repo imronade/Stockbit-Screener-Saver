@@ -1,4 +1,4 @@
-// Stockbit Screener Saver (Excel + Google Sheets Sync)
+// Stockbit Screener Saver (Unified Floating Menu & Modal Settings)
 (function () {
   'use strict';
 
@@ -73,16 +73,16 @@
     return rowsData.filter((r) => r.some((c) => c !== ''));
   }
 
-  // 1. Fitur Download File Excel Lokal (.xlsx)
+  // 1. Download to Excel (.xlsx)
   function downloadExcel() {
     if (typeof XLSX === 'undefined') {
-      alert('Library Excel sedang dimuat, silakan coba 2 detik lagi.');
+      alert('Library Excel sedang dimuat, silakan coba beberapa detik lagi.');
       return;
     }
 
     const cleanRows = extractTableData();
     if (!cleanRows || !cleanRows.length) {
-      alert('Tabel Stockbit Screener tidak ditemukan atau belum dimuat!');
+      alert('Tabel Stockbit Screener tidak ditemukan atau belum selesai dimuat!');
       return;
     }
 
@@ -105,36 +105,12 @@
     document.body.removeChild(link);
   }
 
-  // Fungsi Setting / Edit Webhook URL
-  function promptWebhookUrl() {
-    const currentUrl = localStorage.getItem('stockbit_gsheets_webhook') || '';
-    const newUrl = prompt(
-      'Masukkan / Edit Web App URL Google Apps Script Anda:\n(Harus berakhiran /exec)',
-      currentUrl
-    );
-    if (newUrl !== null) {
-      if (newUrl.trim().startsWith('https://script.google.com') && newUrl.trim().endsWith('/exec')) {
-        localStorage.setItem('stockbit_gsheets_webhook', newUrl.trim());
-        alert('✅ Web App URL berhasil disimpan!');
-        return newUrl.trim();
-      } else if (newUrl.trim() === '') {
-        localStorage.removeItem('stockbit_gsheets_webhook');
-        alert('URL Web App telah dihapus.');
-        return null;
-      } else {
-        alert('⚠️ URL tidak valid!\nPastikan URL berawalan https://script.google.com/macros/s/... dan berakhiran /exec');
-        return null;
-      }
-    }
-    return currentUrl || null;
-  }
-
-  // 2. Fitur Sinkronisasi Langsung ke Google Sheets
-  async function syncToGoogleSheets(btnSync) {
+  // 2. Sync to Google Sheets
+  async function syncToGoogleSheets(statusElement) {
     let webhookUrl = localStorage.getItem('stockbit_gsheets_webhook');
     if (!webhookUrl) {
-      webhookUrl = promptWebhookUrl();
-      if (!webhookUrl) return;
+      openSettingsModal('Harap isi Web App URL terlebih dahulu.');
+      return;
     }
 
     const cleanRows = extractTableData();
@@ -183,9 +159,7 @@
       rows: parsedRows
     };
 
-    const originalText = btnSync.innerHTML;
-    btnSync.innerHTML = '<span>⏳ Mengirim...</span>';
-    btnSync.style.opacity = '0.7';
+    if (statusElement) statusElement.innerText = '⏳ Mengirim data...';
 
     try {
       await fetch(webhookUrl, {
@@ -197,135 +171,297 @@
         body: JSON.stringify(payload)
       });
 
-      alert(`✅ Selesai! Data "${payload.screenerName}" (${parsedRows.length} emiten) berhasil dikirim ke Google Sheets.`);
+      alert(`✅ Berhasil! Data "${payload.screenerName}" (${parsedRows.length} emiten) terkirim ke Google Sheets.`);
     } catch (err) {
       alert('Gagal mengirim ke Google Sheets: ' + err.message);
     } finally {
-      btnSync.innerHTML = originalText;
-      btnSync.style.opacity = '1';
+      if (statusElement) statusElement.innerText = '';
     }
   }
 
-  // 3. Pasang Floating Action Bar di Halaman Screener
-  function injectFloatingButtons() {
+  // 3. Modal Settings Pop-up
+  function openSettingsModal(notice) {
+    const existingModal = document.getElementById('sb-settings-modal');
+    if (existingModal) existingModal.remove();
+
+    const currentUrl = localStorage.getItem('stockbit_gsheets_webhook') || '';
+
+    const overlay = document.createElement('div');
+    overlay.id = 'sb-settings-modal';
+    Object.assign(overlay.style, {
+      position: 'fixed',
+      top: '0',
+      left: '0',
+      width: '100vw',
+      height: '100vh',
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      zIndex: '1000000',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    });
+
+    const modal = document.createElement('div');
+    Object.assign(modal.style, {
+      backgroundColor: '#ffffff',
+      borderRadius: '12px',
+      padding: '24px',
+      width: '90%',
+      maxWidth: '500px',
+      boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+    });
+
+    modal.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1a202c; display: flex; align-items: center; gap: 8px;">
+          ⚙️ Pengaturan Web App URL
+        </h3>
+        <button id="sb-close-modal" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #718096; padding: 0 4px;">&times;</button>
+      </div>
+
+      ${notice ? `<p style="margin: 0 0 12px; font-size: 13px; color: #e53e3e; font-weight: 500;">⚠️ ${notice}</p>` : ''}
+
+      <p style="margin: 0 0 12px; font-size: 13px; color: #4a5568; line-height: 1.5;">
+        Masukkan URL Google Apps Script Web App yang Anda dapatkan setelah klik <b>Deploy &gt; Web app</b> di spreadsheet:
+      </p>
+
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; font-size: 12px; font-weight: 600; color: #2d3748; margin-bottom: 6px;">
+          Google Apps Script Web App URL:
+        </label>
+        <input id="sb-input-url" type="text" value="${currentUrl}" placeholder="https://script.google.com/macros/s/.../exec"
+          ${currentUrl ? 'disabled' : ''}
+          style="width: 100%; box-sizing: border-box; padding: 10px 12px; font-size: 13px; border: 1px solid #cbd5e0; border-radius: 6px; background: ${currentUrl ? '#f7fafc' : '#ffffff'}; outline: none;" />
+        <small style="display: block; margin-top: 6px; font-size: 11px; color: #718096;">
+          Pastikan berawalan <code>https://script.google.com/macros/s/</code> dan berakhiran <code>/exec</code>
+        </small>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+        <button id="sb-btn-edit" style="display: ${currentUrl ? 'inline-block' : 'none'}; padding: 8px 16px; border-radius: 6px; border: 1px solid #cbd5e0; background: #ffffff; color: #2d3748; font-size: 13px; font-weight: 600; cursor: pointer;">
+          ✏️ Edit URL
+        </button>
+        <button id="sb-btn-save" style="padding: 8px 18px; border-radius: 6px; border: none; background: #00ab6b; color: #ffffff; font-size: 13px; font-weight: 600; cursor: pointer;">
+          💾 Simpan
+        </button>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const inputUrl = document.getElementById('sb-input-url');
+    const btnEdit = document.getElementById('sb-btn-edit');
+    const btnSave = document.getElementById('sb-btn-save');
+    const btnClose = document.getElementById('sb-close-modal');
+
+    btnClose.onclick = () => overlay.remove();
+    overlay.onclick = (e) => {
+      if (e.target === overlay) overlay.remove();
+    };
+
+    btnEdit.onclick = () => {
+      inputUrl.disabled = false;
+      inputUrl.style.backgroundColor = '#ffffff';
+      inputUrl.focus();
+      btnEdit.style.display = 'none';
+    };
+
+    btnSave.onclick = () => {
+      const val = inputUrl.value.trim();
+      if (!val) {
+        localStorage.removeItem('stockbit_gsheets_webhook');
+        alert('URL telah dikosongkan.');
+        overlay.remove();
+        return;
+      }
+
+      if (!val.startsWith('https://script.google.com') || !val.endsWith('/exec')) {
+        alert('⚠️ Format URL tidak valid!\nPastikan URL berawalan https://script.google.com/macros/s/ dan berakhiran /exec');
+        return;
+      }
+
+      localStorage.setItem('stockbit_gsheets_webhook', val);
+      alert('✅ Web App URL berhasil disimpan!');
+      overlay.remove();
+    };
+  }
+
+  // 4. Single Unified Floating Icon & Dropdown Menu
+  function injectUnifiedFloatingButton() {
     if (!window.location.href.includes('screener')) {
-      const bar = document.getElementById('stockbit-saver-action-bar');
-      if (bar) bar.remove();
+      const container = document.getElementById('sb-unified-container');
+      if (container) container.remove();
       return;
     }
 
-    if (document.getElementById('stockbit-saver-action-bar')) return;
+    if (document.getElementById('sb-unified-container')) return;
 
-    const bar = document.createElement('div');
-    bar.id = 'stockbit-saver-action-bar';
-    Object.assign(bar.style, {
+    const container = document.createElement('div');
+    container.id = 'sb-unified-container';
+    Object.assign(container.style, {
       position: 'fixed',
       bottom: '24px',
       right: '24px',
       zIndex: '999999',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     });
 
-    // Tombol 1: Download Excel
-    const btnExcel = document.createElement('button');
-    btnExcel.title = 'Download hasil screener ke file Excel (.xlsx)';
-    btnExcel.innerHTML = `
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 5px;">
+    // Menu Popover (Hidden by default)
+    const menu = document.createElement('div');
+    menu.id = 'sb-unified-menu';
+    Object.assign(menu.style, {
+      position: 'absolute',
+      bottom: '62px',
+      right: '0',
+      width: '210px',
+      backgroundColor: '#ffffff',
+      borderRadius: '12px',
+      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+      border: '1px solid #e2e8f0',
+      overflow: 'hidden',
+      display: 'none',
+      flexDirection: 'column',
+      padding: '6px 0',
+      transition: 'all 0.2s ease-in-out'
+    });
+
+    const menuItemStyle = {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      padding: '10px 16px',
+      fontSize: '13px',
+      fontWeight: '600',
+      color: '#2d3748',
+      background: 'none',
+      border: 'none',
+      width: '100%',
+      textAlign: 'left',
+      cursor: 'pointer',
+      transition: 'background 0.15s'
+    };
+
+    // Item 1: Download to Excel
+    const itemExcel = document.createElement('button');
+    itemExcel.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00ab6b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
         <polyline points="7 10 12 15 17 10"></polyline>
         <line x1="12" y1="15" x2="12" y2="3"></line>
       </svg>
-      <span>Excel</span>
+      <span>Download to Excel</span>
     `;
-    Object.assign(btnExcel.style, {
-      backgroundColor: '#00ab6b',
-      color: '#ffffff',
-      border: 'none',
-      borderRadius: '20px',
-      padding: '8px 14px',
-      fontSize: '13px',
-      fontWeight: '600',
-      cursor: 'pointer',
-      boxShadow: '0 4px 12px rgba(0, 171, 107, 0.35)',
-      display: 'flex',
-      alignItems: 'center',
-      transition: 'all 0.2s'
-    });
-    btnExcel.addEventListener('click', downloadExcel);
+    Object.assign(itemExcel.style, menuItemStyle);
+    itemExcel.onmouseover = () => itemExcel.style.backgroundColor = '#f0fdf4';
+    itemExcel.onmouseout = () => itemExcel.style.backgroundColor = 'transparent';
+    itemExcel.onclick = () => {
+      menu.style.display = 'none';
+      downloadExcel();
+    };
 
-    // Tombol 2: Sync to Google Sheets
-    const btnSync = document.createElement('button');
-    btnSync.title = 'Kirim data langsung ke Google Sheets Anda';
-    btnSync.innerHTML = `
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 5px;">
+    // Item 2: Sync to Sheets
+    const itemSync = document.createElement('button');
+    itemSync.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
       </svg>
-      <span>Sync Sheets</span>
+      <span>Sync to Sheets</span>
     `;
-    Object.assign(btnSync.style, {
-      backgroundColor: '#1a73e8',
-      color: '#ffffff',
-      border: 'none',
-      borderRadius: '20px',
-      padding: '8px 14px',
-      fontSize: '13px',
-      fontWeight: '600',
-      cursor: 'pointer',
-      boxShadow: '0 4px 12px rgba(26, 115, 232, 0.35)',
-      display: 'flex',
-      alignItems: 'center',
-      transition: 'all 0.2s'
-    });
-    btnSync.addEventListener('click', () => syncToGoogleSheets(btnSync));
+    Object.assign(itemSync.style, menuItemStyle);
+    itemSync.onmouseover = () => itemSync.style.backgroundColor = '#eff6ff';
+    itemSync.onmouseout = () => itemSync.style.backgroundColor = 'transparent';
+    itemSync.onclick = () => {
+      menu.style.display = 'none';
+      syncToGoogleSheets();
+    };
 
-    // Tombol 3: Icon Gear Settings (Untuk ganti/edit URL Web App kapan saja)
-    const btnSetting = document.createElement('button');
-    btnSetting.title = 'Edit / Ganti Web App URL Google Sheets';
-    btnSetting.innerHTML = `
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    // Divider
+    const divider = document.createElement('div');
+    Object.assign(divider.style, {
+      height: '1px',
+      backgroundColor: '#edf2f7',
+      margin: '4px 0'
+    });
+
+    // Item 3: Setting
+    const itemSetting = document.createElement('button');
+    itemSetting.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#718096" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="3"></circle>
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
       </svg>
+      <span>Setting Web App</span>
     `;
-    Object.assign(btnSetting.style, {
-      backgroundColor: '#ffffff',
-      color: '#4a5568',
-      border: '1px solid #e2e8f0',
+    Object.assign(itemSetting.style, menuItemStyle);
+    itemSetting.onmouseover = () => itemSetting.style.backgroundColor = '#f7fafc';
+    itemSetting.onmouseout = () => itemSetting.style.backgroundColor = 'transparent';
+    itemSetting.onclick = () => {
+      menu.style.display = 'none';
+      openSettingsModal();
+    };
+
+    menu.appendChild(itemExcel);
+    menu.appendChild(itemSync);
+    menu.appendChild(divider);
+    menu.appendChild(itemSetting);
+
+    // Single Floating Main Action Button
+    const mainBtn = document.createElement('button');
+    mainBtn.id = 'sb-main-btn';
+    mainBtn.title = 'Stockbit Screener Saver';
+    mainBtn.innerHTML = `
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+    `;
+    Object.assign(mainBtn.style, {
+      backgroundColor: '#00ab6b',
+      color: '#ffffff',
+      border: 'none',
       borderRadius: '50%',
-      width: '34px',
-      height: '34px',
-      padding: '0',
-      fontSize: '13px',
+      width: '50px',
+      height: '50px',
       cursor: 'pointer',
-      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+      boxShadow: '0 4px 14px rgba(0, 171, 107, 0.45)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      transition: 'all 0.2s'
+      transition: 'all 0.2s ease-in-out'
     });
-    btnSetting.onmouseover = () => {
-      btnSetting.style.backgroundColor = '#f7fafc';
-      btnSetting.style.color = '#1a202c';
-    };
-    btnSetting.onmouseout = () => {
-      btnSetting.style.backgroundColor = '#ffffff';
-      btnSetting.style.color = '#4a5568';
-    };
-    btnSetting.addEventListener('click', promptWebhookUrl);
 
-    bar.appendChild(btnExcel);
-    bar.appendChild(btnSync);
-    bar.appendChild(btnSetting);
-    document.body.appendChild(bar);
+    mainBtn.onmouseover = () => {
+      mainBtn.style.backgroundColor = '#00925b';
+      mainBtn.style.transform = 'scale(1.06)';
+    };
+    mainBtn.onmouseout = () => {
+      mainBtn.style.backgroundColor = '#00ab6b';
+      mainBtn.style.transform = 'scale(1)';
+    };
+
+    mainBtn.onclick = (e) => {
+      e.stopPropagation();
+      menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+    };
+
+    document.addEventListener('click', (e) => {
+      if (!container.contains(e.target)) {
+        menu.style.display = 'none';
+      }
+    });
+
+    container.appendChild(menu);
+    container.appendChild(mainBtn);
+    document.body.appendChild(container);
   }
 
-  injectFloatingButtons();
+  injectUnifiedFloatingButton();
 
   const observer = new MutationObserver(() => {
-    injectFloatingButtons();
+    injectUnifiedFloatingButton();
   });
 
   observer.observe(document.body, {
